@@ -1,27 +1,315 @@
-\documentclass[12pt]{jbeamer}
+\documentclass[dvipsnames,10pt]{jbeamer}
 
 % Insititution Name
 \title[P1635R0]{P1635R0 : A Design for an Inter-Operable and Customizable Linear
 Algebra Library}
 \author{Jayesh Badwaik}
-
+\date{SG14 Linear Algebra SIG}
 \begin{document}
 \maketitle
 
 \begin{frame}
-  \frametitle{Linear Algebra}
+  \frametitle{What this paper is trying to be?}
 
   \begin{itemize}
-    \item P1385 proposes a design for linear algebra
-    \item Based on the idea to provide a standard vocabulary type with template
-      parameters which users can customize for their own purposes.
-    \item There's another way to provide customization.
-    \item Not contradictory to P1385 design, but can be seen as an extension to
-      it.
+    \item Not a library proposal.
+    \item Rather a collection of concepts/techniques which enable the library
+      writers to write inter-operable libraries.
   \end{itemize}
 \end{frame}
 
 \begin{frame}
-  \frametitle{}
+  \frametitle{Linear Algebra}
+  \framesubtitle{Why think about Inter-Operability between Linear Algebra
+  Libraries?}
+
+  \vspace{0.5cm}
+  \begin{itemize}
+    \item Mixing of \inlinecode{vector} in current code.
+    \item Standard will always move slowly with regards to current practice.
+    \item There will be other linear algebra libraries which will do things
+      standard cannot do.
+    \item Some libraries will use these \textbf{other} libraries.
+    \item These other libraries \textbf{might not} use the vocabulary-like
+      types.
+    \item Well-designed linear algebra types in STL will prevent drive-by
+      implementations of library, but custom library implementers might still go
+      off and do their own thing.
+  \end{itemize}
 \end{frame}
+
+\begin{frame}
+  \frametitle{Impacts of Non-Interoperability on User Code}
+      \begin{itemize}
+        \item Run-Time Performance
+
+            If I use a library which uses standard linear algebra library and
+            another library which uses another standard library, then, there
+            will always be a copy between the two.
+
+            This will result in:
+            \begin{itemize}
+              \item Reimplementing the library by performance-conscious people.
+              \item Lack of performance by copies permeating through the code
+                base.
+            \end{itemize}
+    \item  Ecosystem Effects
+      \begin{itemize}
+        \item There is a possibility (possibly small) of the standard linear
+          algebra ecosystem falling enough behind that people stop using it, and
+          use other libraries instead.
+      \end{itemize}
+    \end{itemize}
+
+\end{frame}
+
+\begin{frame}[fragile]
+  \frametitle{Defining the Problem Space}
+  \framesubtitle{Restriction to Operator Algebra}
+
+  \vspace{1cm}
+
+\begin{acodecpp}{}
+auto const a = alpha::func(); // std::matrix
+auto const b = beta::func(); // b:matrix:
+auto const c = beta::other_func(); // b::vector:
+auto const d = p::compute_eigenvalues(a,b);
+auto const e = p::gaussian_elimination(a,c);
+\end{acodecpp}
+
+
+What do we not have today that prevents this from happening?
+
+\begin{itemize}
+  \item \inlinecode{a+b}, \inlinecode{a*b}, \inlinecode{a[i] * b[j]} (vectors)
+  \item Pessimization of operators in face of structured matrices, sparse matrices etc.
+\end{itemize}
+
+\end{frame}
+
+\begin{frame}[fragile]
+  \frametitle{Defining the Problem Space : Compatibility With?}
+  \framesubtitle{Heterogenous Computing}
+
+Talk a little heterogenous computing.
+\begin{acodecpp}{}
+auto const a = alpha::func(); // std::matrix
+auto const c = beta::other_func(); // b::vector:
+// Compiler Error?
+auto const e = gpu::gaussian_elimination(a,c);
+// Copy and Compute (What if a and c are already on gpu?)
+auto const f = gpu::gaussian_elimination(a,c);
+\end{acodecpp}
+\end{frame}
+
+\begin{frame}[fragile]
+  \frametitle{Defining the Problem Space : Compatibility With?}
+  \framesubtitle{Expression Templates}
+
+\begin{acodecpp}{}
+auto const a = alpha::func(); // std::matrix
+auto const t1 = beta::transpose(a); // ET?
+auto const t2 = beta::transpose(t1*alpha::g()); // Return By Value
+\end{acodecpp}
+\end{frame}
+
+\begin{frame}[fragile]
+  \frametitle{Tools to Solve the Problem}
+  \framesubtitle{Three Techniques}
+
+  \begin{itemize}
+    \item  Non-owning Types aka Expression Templates / Views
+    \item  Engine-Aware Types
+    \item  Engines and Engine-Associated Operator
+  \end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+  \frametitle{1. Non-owning Types aka ET/Views}
+  \framesubtitle{Intent : Not Wording}
+
+  A type is said to be a non-owning type if an object of this type needs an
+  independent object to exist separately for it to be well-behaved.
+
+\begin{acodecpp}{}
+auto a = alpha::func(); // Returned by Value
+auto view= alpha::transpose(a); // A Non-owning Type
+\end{acodecpp}
+
+So, all such types should export
+
+\inlinecode{using is\_owning\_type=std::false\_type;}
+\end{frame}
+
+\begin{frame}[fragile]
+  \frametitle{1. Non-owning Types aka ET/Views}
+  \framesubtitle{Intent : Not Wording}
+
+Assume \inlinecode{alpha::func()} returns \inlinecode{a::matrix}.
+Now, there exists a proof of concept which does the following
+\begin{acodecpp}{}
+// returns by value
+auto const a = alpha::tp(alpha::func());
+// returns a view
+auto const b = alpha::tp(a);
+// returns a view
+auto const c = alpha::tp(alpha::tp(b));
+\end{acodecpp}
+\end{frame}
+
+
+\begin{frame}[fragile]
+  \frametitle{2. Engine-Aware Types}
+  \framesubtitle{Engine-Aware Non-Owning Types}
+
+
+\begin{acodecpp}{}
+ template<typename E, typename OT>
+  class view {
+  public:
+    using engine_type = E;
+    using is_owning_type = std::false_type;
+
+  public:
+    template <typename NE>
+    auto change_engine() const -> view<NE, OT>;
+
+  private:
+    OT* ot_;
+  };
+\end{acodecpp}
+\end{frame}
+
+\begin{frame}[fragile]
+  \frametitle{2. Engine-Aware Types}
+  \framesubtitle{Engine-Aware Owning Types}
+
+
+\begin{acodecpp}{}
+  template<typename E>
+  class owning {
+  public:
+    using engine_type = E;
+    using is_owning_type = std::true_type;
+
+  public:
+    template <typename NE>
+    auto change_engine() && -> owning<NE>;
+
+    template <typename NE>
+    auto change_engine() & -> view<NE, owning<E>>;
+
+    template <typename NE>
+    auto change_engine() const& -> view<NE, owning<E> const>;
+  };
+\end{acodecpp}
+\end{frame}
+
+\begin{frame}[fragile, allowframebreaks]
+  \frametitle{3. Engine and Engine-Associated Operators}
+  \framesubtitle{\inlinecode{std::math} namespace}
+
+\begin{acodecpp}{An Engine}
+  struct serial_cpu_engine{};
+\end{acodecpp}
+
+
+\begin{codecpp}{Addition Engine Traits}
+template <typename T, typename U>
+struct addition_traits {
+  using result_type = X ; // X can be determined using any logic required
+};
+\end{codecpp}
+
+\begin{codecpp}{Engine-Based Operator}
+template <
+typename T,
+typename U,
+typename = std::enable_if<
+std::math::uses_engine_v<serial_cpu_engine, T, U>>>
+auto operator+(T&& t, U&& u) -> addition_traits_r<T&&, U&&>;
+\end{codecpp}
+
+\begin{codecpp}{Serial Code for Multiplication of Two Vectors}
+  using sce = std::math::serial_cpu_engine;
+  using stdvec = std::math::vector;
+  using custvec = another_lib::vector;
+
+  auto const ov1 = stdvec<sce>(arg...);
+  auto const ov2 = custvec<sce>(arg...);
+
+  auto const view_3 = ov1 + ov2;
+
+  auto const ov4 = stdvec<sce>(args...) + ov1;
+\end{codecpp}
+
+\begin{itemize}
+\item Discuss the ADL-based lookup and how we can ensure that it does not go
+    rogue.
+\item DO NOT DECLARE OPERATORS FOR TYPES, ONLY FOR ENGINES.
+\end{itemize}
+
+
+\begin{codecpp}{Parallel Code for Multiplication of Two Vectors}
+  using sce = std::math::sce;
+  using pce = custom::pce;
+  using stdvec = std::math::vector;
+  using custvec = another_lib::vector;
+
+  auto const ov1 = stdvec<sce>(arg...);
+  auto const ov2 = custvec<pce>(arg...);
+
+  auto const view_3 = ov1.change_engine<pce>() + ov2;
+
+  auto const ov4 = f().change_engine<pce>()
+                    + ov2.change_engine<pce>();
+\end{codecpp}
+
+
+
+
+\begin{codecpp}{Inheriting Behavior of Operator from Another Engine}
+template <
+typename T,
+typename U,
+typename = std::enable_if<
+  std::math::uses_engine_v<serial_cpu_engine, T, U>>>
+auto operator+(T&& t, U&& u) -> addition_traits_r<T&&, U&&>
+{
+  return t.change_engine<some_other>()
+          + u.change_engine<some_other>();
+}
+\end{codecpp}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Some Additional Points}
+
+  \begin{itemize}
+    \item Less pressure on standard library to have all functions.
+    \item Graceful migration of functions from one library to another.
+    \item A weak standard library will spawn a creation of lot of "engines" and
+      types. But with this design, a growth of  stronger standard library can
+      potentially reduce the problem.
+  \end{itemize}
+\end{frame}
+
+
+
+\begin{frame}
+  \frametitle{So, we can (potentially) solve our problems this way.}
+
+  \begin{itemize}
+    \item Proof of concept at
+      \url{https://github.com/liblac/proof-of-concept}
+
+    \item Questions/Polls: Does SG14 consider this a viable exploration of
+      design for linear algebra library?
+      (Implying that current design be modified in accordance with these ideas.)
+  \end{itemize}
+\end{frame}
+
+
+
+
 \end{document}
