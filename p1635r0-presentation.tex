@@ -15,6 +15,13 @@ Algebra Library}
     \item Not a library proposal.
     \item Rather a collection of concepts/techniques which enable the library
       writers to write inter-operable libraries.
+    \item Why make an effort to standardize this?
+
+      \begin{itemize}
+        \item Multiple ways libraries can interoperate.
+        \item One of the ways is this, if standard does it and if it is a good
+          enough design, then other libraries might follow.
+      \end{itemize}
   \end{itemize}
 \end{frame}
 
@@ -228,6 +235,7 @@ typename U,
 typename = std::enable_if<
 std::math::uses_engine_v<serial_cpu_engine, T, U>>>
 auto operator+(T&& t, U&& u) -> addition_traits_r<T&&, U&&>;
+// Can also SFINAE on something like `is_linear_algebra_type`
 \end{codecpp}
 
 \begin{codecpp}{Serial Code for Multiplication of Two Vectors}
