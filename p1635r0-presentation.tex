@@ -291,6 +291,10 @@ auto operator+(T&& t, U&& u) -> addition_traits_r<T&&, U&&>
     \item A weak standard library will spawn a creation of lot of "engines" and
       types. But with this design, a growth of  stronger standard library can
       potentially reduce the problem.
+    \item Question of well-established practice: None of the Linear Algebra
+      library has used this practice before, but STL is based on this idea.
+      So, C++ wise, the methods are pretty established.
+    \item Need to check compatibility of these techniques with linear algebra.
   \end{itemize}
 \end{frame}
 
